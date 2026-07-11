@@ -8,7 +8,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-# Configuration
+# Constants
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 TOP_K = 6
@@ -16,16 +16,17 @@ MAX_CONTEXT_CHARS = 1800
 MODEL_NAME = "google/flan-t5-large"
 HISTORY_FILE = "chat_history.json"
 
+# Device setup
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {DEVICE}")
 
-# Load Model
+# Load model and tokenizer
 print("Loading model, please wait...")
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME).to(DEVICE)
 print("Model loaded.")
 
-# Knowledge base
+# Knowledge base class
 class KnowledgeBase:
     def __init__(self):
         self.chunks = []
@@ -101,7 +102,7 @@ class KnowledgeBase:
 
 kb = KnowledgeBase()
 
-# Chat history
+# Chat history functions
 def load_history():
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, "r") as f:
@@ -114,7 +115,7 @@ def save_history(history):
 
 chat_history = load_history()
 
-# Generate answer
+# Generate answer function
 def generate_answer(query, context, sources):
     if not context or "No relevant" in context:
         prompt = (
@@ -145,7 +146,7 @@ def generate_answer(query, context, sources):
     answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
     return answer
 
-# UI functions
+# UI callback functions
 def upload_pdfs(files):
     status_messages = []
     for f in files:
@@ -154,9 +155,12 @@ def upload_pdfs(files):
     return "\n".join(status_messages)
 
 def chat(user_input, chat_history):
-    timestamp = datetime.now().strftime("%H:%M")
+    global chat_history
+    chat_history = chat_history or []
+    chat_history = list(chat_history)  # convert from tuple if needed
+    # Add user message
     chat_history.append(("User", user_input))
-    # Build context from PDFs
+    # Build context
     context, sources = kb.build_context(user_input)
     # Generate answer
     answer = generate_answer(user_input, context, sources)
@@ -175,12 +179,11 @@ def clear_chat():
     save_history([])
     return []
 
-# Gradio Interface
+# Gradio UI
 with gr.Blocks() as demo:
     gr.Markdown(
         """
         # Power Systems RAG Learning Assistant
-        <br>
         Upload PDFs related to power systems, then ask questions!
         """
     )
@@ -193,14 +196,12 @@ with gr.Blocks() as demo:
     chat_box = gr.Chatbot()
     user_input = gr.Textbox(placeholder="Ask me about power systems...", label="Your Question")
     send_button = gr.Button("Send")
-
     # Callbacks
     upload_button.click(upload_pdfs, [upload_files], None)
     clear_button.click(clear_chat, None, chat_box)
     send_button.click(chat, [user_input, chat_box], chat_box)
-    # Also allow pressing Enter to send
     user_input.submit(chat, [user_input, chat_box], chat_box)
 
-# Launch the app
+# Run app
 if __name__ == "__main__":
     demo.launch()
